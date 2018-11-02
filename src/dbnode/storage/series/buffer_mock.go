@@ -168,29 +168,6 @@ func (mr *MockdatabaseBufferMockRecorder) Bootstrap(bl interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bootstrap", reflect.TypeOf((*MockdatabaseBuffer)(nil).Bootstrap), bl)
 }
 
-// Reset mocks base method
-func (m *MockdatabaseBuffer) Reset(opts Options) {
-	m.ctrl.Call(m, "Reset", opts)
-}
-
-// Reset indicates an expected call of Reset
-func (mr *MockdatabaseBufferMockRecorder) Reset(opts interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockdatabaseBuffer)(nil).Reset), opts)
-}
-
-// Stream mocks base method
-func (m *MockdatabaseBuffer) Stream(ctx context.Context, mType metricType, blockStart time.Time) (xio.BlockReader, error) {
-	ret := m.ctrl.Call(m, "Stream", ctx, mType, blockStart)
-	ret0, _ := ret[0].(xio.BlockReader)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Stream indicates an expected call of Stream
-func (mr *MockdatabaseBufferMockRecorder) Stream(ctx, mType, blockStart interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stream", reflect.TypeOf((*MockdatabaseBuffer)(nil).Stream), ctx, mType, blockStart)
-}
-
 // Flush mocks base method
 func (m *MockdatabaseBuffer) Flush(ctx context.Context, blockStart time.Time, id ident.ID, tags ident.Tags, persistFn persist.DataFn) (FlushOutcome, error) {
 	ret := m.ctrl.Call(m, "Flush", ctx, blockStart, id, tags, persistFn)
@@ -202,4 +179,14 @@ func (m *MockdatabaseBuffer) Flush(ctx context.Context, blockStart time.Time, id
 // Flush indicates an expected call of Flush
 func (mr *MockdatabaseBufferMockRecorder) Flush(ctx, blockStart, id, tags, persistFn interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockdatabaseBuffer)(nil).Flush), ctx, blockStart, id, tags, persistFn)
+}
+
+// Reset mocks base method
+func (m *MockdatabaseBuffer) Reset(opts Options) {
+	m.ctrl.Call(m, "Reset", opts)
+}
+
+// Reset indicates an expected call of Reset
+func (mr *MockdatabaseBufferMockRecorder) Reset(opts interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockdatabaseBuffer)(nil).Reset), opts)
 }

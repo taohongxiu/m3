@@ -103,12 +103,6 @@ type databaseBuffer interface {
 
 	Bootstrap(bl block.DatabaseBlock)
 
-	Stream(
-		ctx context.Context,
-		mType metricType,
-		blockStart time.Time,
-	) (xio.BlockReader, error)
-
 	Flush(
 		ctx context.Context,
 		blockStart time.Time,
@@ -428,15 +422,6 @@ func (b *dbBuffer) isRealtime(now time.Time, timestamp time.Time) (bool, metricT
 	}
 
 	return isRealtime, outOfOrderType
-}
-
-func (b *dbBuffer) Stream(ctx context.Context, mType metricType, blockStart time.Time) (xio.BlockReader, error) {
-	bucket, exists := b.bucketAt(blockStart)
-	if !exists {
-		return xio.EmptyBlockReader, errBucketDoesNotExist
-	}
-
-	return bucket.stream(ctx, realtimeType)
 }
 
 func (b *dbBuffer) Flush(
@@ -909,6 +894,10 @@ func (b *dbBufferBucket) discardMerged(mType metricType) (discardMergedResult, e
 }
 
 func (b *dbBufferBucket) stream(ctx context.Context, mType metricType) (xio.BlockReader, error) {
+	if mType == allMetricTypes {
+		return xio.EmptyBlockReader, errInvalidMetricType
+	}
+
 	if b.empty() {
 		return xio.EmptyBlockReader, nil
 	}
@@ -920,20 +909,17 @@ func (b *dbBufferBucket) stream(ctx context.Context, mType metricType) (xio.Bloc
 		return xio.EmptyBlockReader, err
 	}
 
-	// This operation is safe because all of the underlying resources will respect the
-	// lifecycle of the context in one way or another. The "bootstrapped blocks" that
-	// we stream from will mark their internal context as dependent on that of the passed
-	// context, and the Encoder's that we stream from actually perform a data copy and
-	// don't share a reference.
-	streams := b.streams(ctx, mType)
-	if len(streams) != 1 {
-		// Should never happen as the call to merge above should result in only a single
-		// stream being present.
-		return xio.EmptyBlockReader, errMoreThanOneStreamAfterMerge
+	if s := b.encoders[mType][0].encoder.Stream(); s != nil {
+		br := xio.BlockReader{
+			SegmentReader: s,
+			Start:         b.start,
+			BlockSize:     b.opts.RetentionOptions().BlockSize(),
+		}
+		ctx.RegisterFinalizer(s)
+		return br, nil
 	}
 
-	// Direct indexing is safe because !empty guarantees us at least one stream
-	return streams[0], nil
+	return xio.EmptyBlockReader, nil
 }
 
 type dbBufferBucketPool struct {

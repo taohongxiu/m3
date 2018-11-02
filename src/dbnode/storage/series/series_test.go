@@ -111,7 +111,10 @@ func TestSeriesWriteFlush(t *testing.T) {
 	ctx := context.NewContext()
 	defer ctx.Close()
 
-	stream, err := series.buffer.Stream(ctx, realtimeType, start)
+	bucket, exists := series.buffer.(*dbBuffer).bucketAt(start)
+	require.True(t, exists)
+
+	stream, err := bucket.stream(ctx, realtimeType)
 	require.NoError(t, err)
 	assertValuesEqual(t, data[:2], [][]xio.BlockReader{[]xio.BlockReader{
 		stream,
