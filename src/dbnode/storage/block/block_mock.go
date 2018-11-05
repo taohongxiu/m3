@@ -373,18 +373,6 @@ func (mr *MockDatabaseBlockMockRecorder) HasMergeTarget() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasMergeTarget", reflect.TypeOf((*MockDatabaseBlock)(nil).HasMergeTarget))
 }
 
-// WasRetrievedFromDisk mocks base method
-func (m *MockDatabaseBlock) WasRetrievedFromDisk() bool {
-	ret := m.ctrl.Call(m, "WasRetrievedFromDisk")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// WasRetrievedFromDisk indicates an expected call of WasRetrievedFromDisk
-func (mr *MockDatabaseBlockMockRecorder) WasRetrievedFromDisk() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WasRetrievedFromDisk", reflect.TypeOf((*MockDatabaseBlock)(nil).WasRetrievedFromDisk))
-}
-
 // Reset mocks base method
 func (m *MockDatabaseBlock) Reset(startTime time.Time, blockSize time.Duration, segment ts.Segment) {
 	m.ctrl.Call(m, "Reset", startTime, blockSize, segment)
@@ -425,18 +413,6 @@ func (m *MockDatabaseBlock) Close() {
 // Close indicates an expected call of Close
 func (mr *MockDatabaseBlockMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockDatabaseBlock)(nil).Close))
-}
-
-// CloseIfFromDisk mocks base method
-func (m *MockDatabaseBlock) CloseIfFromDisk() bool {
-	ret := m.ctrl.Call(m, "CloseIfFromDisk")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// CloseIfFromDisk indicates an expected call of CloseIfFromDisk
-func (mr *MockDatabaseBlockMockRecorder) CloseIfFromDisk() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseIfFromDisk", reflect.TypeOf((*MockDatabaseBlock)(nil).CloseIfFromDisk))
 }
 
 // SetOnEvictedFromWiredList mocks base method

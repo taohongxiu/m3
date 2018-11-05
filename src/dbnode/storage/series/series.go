@@ -32,7 +32,6 @@ import (
 	"github.com/m3db/m3/src/dbnode/x/xio"
 	"github.com/m3db/m3x/context"
 	"github.com/m3db/m3x/ident"
-	"github.com/m3db/m3x/instrument"
 	xlog "github.com/m3db/m3x/log"
 	xtime "github.com/m3db/m3x/time"
 )
@@ -124,6 +123,14 @@ func (s *dbSeries) Tick() (TickResult, error) {
 	bufferResult := s.buffer.Tick()
 	r.MergedOutOfOrderBlocks = bufferResult.mergedOutOfOrderBlocks
 
+	for _, blockStart := range bufferResult.bucketsRemoved {
+		// A bucket being removed from the buffer means that there is new data
+		// that got persisted to disk for that blockStart. As such, the cached
+		// block is no longer up to date, so we remove it to be retrieved from
+		// disk next time this is queried for.
+		s.blocks.RemoveBlockAt(blockStart)
+	}
+
 	update, err := s.updateBlocksWithLock()
 	if err != nil {
 		s.Unlock()
@@ -182,7 +189,7 @@ func (s *dbSeries) updateBlocksWithLock() (updateBlocksResult, error) {
 			// 		4) WiredList tries to close the block, not knowing that it has
 			// 		   already been closed, and re-opened / re-used leading to
 			// 		   unexpected behavior or data loss.
-			if cachePolicy == CacheLRU && currBlock.WasRetrievedFromDisk() {
+			if cachePolicy == CacheLRU {
 				// Do nothing
 			} else {
 				currBlock.Close()
@@ -215,7 +222,7 @@ func (s *dbSeries) updateBlocksWithLock() (updateBlocksResult, error) {
 				// The tick is responsible for managing the lifecycle of blocks that were not
 				// read from disk (not retrieved), and the WiredList will manage those that were
 				// retrieved from disk.
-				shouldUnwire = !currBlock.WasRetrievedFromDisk()
+				shouldUnwire = false
 			default:
 				s.opts.InstrumentOptions().Logger().Fatalf(
 					"unhandled cache policy in series tick: %s", cachePolicy)
@@ -330,7 +337,8 @@ func (s *dbSeries) FetchBlocksMetadata(
 		if !start.Before(t.Add(blockSize)) || !t.Before(end) {
 			continue
 		}
-		if !opts.IncludeCachedBlocks && b.WasRetrievedFromDisk() {
+		//HERE is this option necessary now that all blocks are cached blocks?
+		if !opts.IncludeCachedBlocks {
 			// Do not include cached blocks if not specified to, this is
 			// to avoid high amounts of duplication if a significant number of
 			// blocks are cached in memory when returning blocks metadata
@@ -503,20 +511,16 @@ func (s *dbSeries) OnRetrieveBlock(
 // whether the data originated from disk or buffer rotation.
 func (s *dbSeries) OnReadBlock(b block.DatabaseBlock) {
 	if list := s.opts.DatabaseBlockOptions().WiredList(); list != nil {
-		// The WiredList is only responsible for managing the lifecycle of blocks
-		// retrieved from disk.
-		if b.WasRetrievedFromDisk() {
-			// 1) Need to update the WiredList so it knows which blocks have been
-			// most recently read.
-			// 2) We do a non-blocking update here to prevent deadlock with the
-			// WiredList calling OnEvictedFromWiredList on the same series since
-			// OnReadBlock is usually called within the context of a read lock
-			// on this series.
-			// 3) Its safe to do a non-blocking update because the wired list has
-			// already been exposed to this block, so even if the wired list drops
-			// this update, it will still manage this blocks lifecycle.
-			list.NonBlockingUpdate(b)
-		}
+		// 1) Need to update the WiredList so it knows which blocks have been
+		// most recently read.
+		// 2) We do a non-blocking update here to prevent deadlock with the
+		// WiredList calling OnEvictedFromWiredList on the same series since
+		// OnReadBlock is usually called within the context of a read lock
+		// on this series.
+		// 3) Its safe to do a non-blocking update because the wired list has
+		// already been exposed to this block, so even if the wired list drops
+		// this update, it will still manage this blocks lifecycle.
+		list.NonBlockingUpdate(b)
 	}
 }
 
@@ -529,22 +533,7 @@ func (s *dbSeries) OnEvictedFromWiredList(id ident.ID, blockStart time.Time) {
 		return
 	}
 
-	block, ok := s.blocks.BlockAt(blockStart)
-	if ok {
-		if !block.WasRetrievedFromDisk() {
-			// Should never happen - invalid application state could cause data loss
-			instrument.EmitAndLogInvariantViolation(
-				s.opts.InstrumentOptions(), func(l xlog.Logger) {
-					l.WithFields(
-						xlog.NewField("id", id.String()),
-						xlog.NewField("blockStart", blockStart),
-					).Errorf("tried to evict block that was not retrieved from disk")
-				})
-			return
-		}
-
-		s.blocks.RemoveBlockAt(blockStart)
-	}
+	s.blocks.RemoveBlockAt(blockStart)
 }
 
 func (s *dbSeries) Flush(
@@ -610,20 +599,15 @@ func (s *dbSeries) Close() {
 	case CacheLRU:
 		// In the CacheLRU case, blocks that were retrieved from disk are owned
 		// by the WiredList and should not be closed here. They will eventually
-		// be evicted and closed by  the WiredList when it needs to make room
+		// be evicted and closed by the WiredList when it needs to make room
 		// for new blocks.
-		for _, block := range s.blocks.AllBlocks() {
-			if !block.WasRetrievedFromDisk() {
-				block.Close()
-			}
-		}
 	default:
 		s.blocks.RemoveAll()
 	}
 
 	// Reset (not close) underlying resources because the series will go
 	// back into the pool and be re-used.
-	s.buffer.Reset(s.opts)
+	s.buffer.Reset(s.blockRetriever, s.opts)
 	s.blocks.Reset()
 
 	if s.pool != nil {
@@ -661,7 +645,7 @@ func (s *dbSeries) Reset(
 	s.tags = tags
 
 	s.blocks.Reset()
-	s.buffer.Reset(opts)
+	s.buffer.Reset(blockRetriever, opts)
 	s.opts = opts
 	s.bs = bootstrapNotStarted
 	s.blockRetriever = blockRetriever

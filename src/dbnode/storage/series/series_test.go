@@ -27,14 +27,12 @@ import (
 	"time"
 
 	"github.com/m3db/m3/src/dbnode/clock"
-	"github.com/m3db/m3/src/dbnode/digest"
 	"github.com/m3db/m3/src/dbnode/encoding"
 	"github.com/m3db/m3/src/dbnode/encoding/m3tsz"
 	"github.com/m3db/m3/src/dbnode/retention"
 	"github.com/m3db/m3/src/dbnode/storage/block"
 	"github.com/m3db/m3/src/dbnode/ts"
 	"github.com/m3db/m3/src/dbnode/x/xio"
-	"github.com/m3db/m3x/checked"
 	"github.com/m3db/m3x/context"
 	xerrors "github.com/m3db/m3x/errors"
 	"github.com/m3db/m3x/ident"
@@ -374,30 +372,15 @@ func TestSeriesTickCacheLRU(t *testing.T) {
 	_, err := series.Bootstrap(nil)
 	assert.NoError(t, err)
 
-	// Test case where block was not retrieved from disk - Will be removed
+	// Test case where block was retrieved from disk - Will not be removed
 	b := block.NewMockDatabaseBlock(ctrl)
 	b.EXPECT().StartTime().Return(curr)
-	b.EXPECT().WasRetrievedFromDisk().Return(false)
-	b.EXPECT().Close().Return()
+	b.EXPECT().HasMergeTarget().Return(true)
 	series.blocks.AddBlock(b)
 
 	blockRetriever.EXPECT().IsBlockRetrievable(curr).Return(true)
 
 	tickResult, err := series.Tick()
-	require.NoError(t, err)
-	require.Equal(t, 1, tickResult.UnwiredBlocks)
-	require.Equal(t, 0, tickResult.PendingMergeBlocks)
-
-	// Test case where block was retrieved from disk - Will not be removed
-	b = block.NewMockDatabaseBlock(ctrl)
-	b.EXPECT().StartTime().Return(curr)
-	b.EXPECT().HasMergeTarget().Return(true)
-	b.EXPECT().WasRetrievedFromDisk().Return(true)
-	series.blocks.AddBlock(b)
-
-	blockRetriever.EXPECT().IsBlockRetrievable(curr).Return(true)
-
-	tickResult, err = series.Tick()
 	require.NoError(t, err)
 	require.Equal(t, 0, tickResult.UnwiredBlocks)
 	require.Equal(t, 1, tickResult.PendingMergeBlocks)
@@ -412,7 +395,6 @@ func TestSeriesTickCacheLRU(t *testing.T) {
 	// Test case where block was retrieved from disk and is out of retention. Will be removed, but not closed.
 	b = block.NewMockDatabaseBlock(ctrl)
 	b.EXPECT().StartTime().Return(curr.Add(-2 * retentionPeriod))
-	b.EXPECT().WasRetrievedFromDisk().Return(true)
 	series.blocks.AddBlock(b)
 	_, expiredBlockExists := series.blocks.BlockAt(curr.Add(-2 * retentionPeriod))
 	require.Equal(t, true, expiredBlockExists)
@@ -540,15 +522,6 @@ func TestSeriesFetchBlocksMetadata(t *testing.T) {
 
 	blocks := map[xtime.UnixNano]block.DatabaseBlock{}
 	b := block.NewMockDatabaseBlock(ctrl)
-	head := checked.NewBytes([]byte{0x1, 0x2}, nil)
-	tail := checked.NewBytes([]byte{0x3, 0x4}, nil)
-	expectedSegment := ts.NewSegment(head, tail, ts.FinalizeNone)
-	b.EXPECT().Len().Return(expectedSegment.Len())
-	expectedChecksum := digest.SegmentChecksum(expectedSegment)
-	b.EXPECT().Checksum().Return(expectedChecksum, nil)
-	expectedLastRead := time.Now()
-	b.EXPECT().LastReadTime().Return(expectedLastRead)
-	b.EXPECT().WasRetrievedFromDisk().Return(false)
 	blocks[xtime.ToUnixNano(starts[0])] = b
 	blocks[xtime.ToUnixNano(starts[3])] = nil
 
@@ -582,7 +555,6 @@ func TestSeriesFetchBlocksMetadata(t *testing.T) {
 	require.Equal(t, "bar", res.ID.String())
 
 	metadata := res.Blocks.Results()
-	expectedSize := int64(4)
 	expected := []struct {
 		start    time.Time
 		size     int64
@@ -590,7 +562,6 @@ func TestSeriesFetchBlocksMetadata(t *testing.T) {
 		lastRead time.Time
 		hasError bool
 	}{
-		{starts[0], expectedSize, &expectedChecksum, expectedLastRead, false},
 		{starts[2], 0, nil, time.Time{}, false},
 	}
 	require.Equal(t, len(expected), len(metadata))
@@ -754,14 +725,11 @@ func TestSeriesCloseCacheLRUPolicy(t *testing.T) {
 	// Add a block that was retrieved from disk
 	diskBlock := block.NewMockDatabaseBlock(ctrl)
 	diskBlock.EXPECT().StartTime().Return(start).AnyTimes()
-	diskBlock.EXPECT().WasRetrievedFromDisk().Return(true)
 	blocks.AddBlock(diskBlock)
 
 	// Add block that was not retrieved from disk
 	nonDiskBlock := block.NewMockDatabaseBlock(ctrl)
 	nonDiskBlock.EXPECT().StartTime().Return(start.Add(opts.RetentionOptions().BlockSize())).AnyTimes()
-	nonDiskBlock.EXPECT().WasRetrievedFromDisk().Return(false)
-	nonDiskBlock.EXPECT().Close()
 	blocks.AddBlock(nonDiskBlock)
 
 	series.blocks = blocks

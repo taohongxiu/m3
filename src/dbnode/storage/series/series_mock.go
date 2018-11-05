@@ -287,6 +287,18 @@ func (m *MockQueryableBlockRetriever) EXPECT() *MockQueryableBlockRetrieverMockR
 	return m.recorder
 }
 
+// BlockLastSuccess mocks base method
+func (m *MockQueryableBlockRetriever) BlockLastSuccess(arg0 time.Time) time.Time {
+	ret := m.ctrl.Call(m, "BlockLastSuccess", arg0)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// BlockLastSuccess indicates an expected call of BlockLastSuccess
+func (mr *MockQueryableBlockRetrieverMockRecorder) BlockLastSuccess(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockLastSuccess", reflect.TypeOf((*MockQueryableBlockRetriever)(nil).BlockLastSuccess), arg0)
+}
+
 // IsBlockRetrievable mocks base method
 func (m *MockQueryableBlockRetriever) IsBlockRetrievable(arg0 time.Time) bool {
 	ret := m.ctrl.Call(m, "IsBlockRetrievable", arg0)

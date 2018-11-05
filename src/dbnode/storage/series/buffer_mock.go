@@ -182,11 +182,11 @@ func (mr *MockdatabaseBufferMockRecorder) Flush(ctx, blockStart, id, tags, persi
 }
 
 // Reset mocks base method
-func (m *MockdatabaseBuffer) Reset(opts Options) {
-	m.ctrl.Call(m, "Reset", opts)
+func (m *MockdatabaseBuffer) Reset(blockRetriever QueryableBlockRetriever, opts Options) {
+	m.ctrl.Call(m, "Reset", blockRetriever, opts)
 }
 
 // Reset indicates an expected call of Reset
-func (mr *MockdatabaseBufferMockRecorder) Reset(opts interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockdatabaseBuffer)(nil).Reset), opts)
+func (mr *MockdatabaseBufferMockRecorder) Reset(blockRetriever, opts interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockdatabaseBuffer)(nil).Reset), blockRetriever, opts)
 }

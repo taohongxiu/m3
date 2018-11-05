@@ -111,7 +111,7 @@ type databaseBuffer interface {
 		persistFn persist.DataFn,
 	) (FlushOutcome, error)
 
-	Reset(opts Options)
+	Reset(blockRetriever QueryableBlockRetriever, opts Options)
 }
 
 type bufferStats struct {
@@ -121,12 +121,14 @@ type bufferStats struct {
 
 type bufferTickResult struct {
 	mergedOutOfOrderBlocks int
+	bucketsRemoved         []time.Time
 }
 
 type dbBuffer struct {
-	opts    Options
-	nowFn   clock.NowFn
-	drainFn databaseBufferDrainFn
+	opts           Options
+	nowFn          clock.NowFn
+	drainFn        databaseBufferDrainFn
+	blockRetriever QueryableBlockRetriever
 
 	buckets     map[xtime.UnixNano]*dbBufferBucket
 	bucketCache [cacheSize]*dbBufferBucket
@@ -150,9 +152,10 @@ func newDatabaseBuffer(drainFn databaseBufferDrainFn) databaseBuffer {
 	return b
 }
 
-func (b *dbBuffer) Reset(opts Options) {
+func (b *dbBuffer) Reset(blockRetriever QueryableBlockRetriever, opts Options) {
 	b.opts = opts
 	b.nowFn = opts.ClockOptions().NowFn()
+	b.blockRetriever = blockRetriever
 	bucketPoolOpts := pool.NewObjectPoolOptions().SetSize(defaultBucketContainerPoolSize)
 	b.bucketPool = newDBBufferBucketPool(bucketPoolOpts)
 	ropts := opts.RetentionOptions()
@@ -187,7 +190,7 @@ func (b *dbBuffer) Write(
 
 func (b *dbBuffer) IsEmpty() bool {
 	for _, bucket := range b.buckets {
-		if !bucket.empty() {
+		if !bucket.isEmpty() {
 			return false
 		}
 	}
@@ -198,7 +201,7 @@ func (b *dbBuffer) Stats() bufferStats {
 	var stats bufferStats
 	for _, bucket := range b.buckets {
 		// TODO(juchan): redefine what's meant by open/wired
-		if bucket.empty() {
+		if bucket.isEmpty() {
 			continue
 		}
 
@@ -209,9 +212,26 @@ func (b *dbBuffer) Stats() bufferStats {
 }
 
 func (b *dbBuffer) Tick() bufferTickResult {
-	var res bufferTickResult
+	var (
+		res       bufferTickResult
+		retriever = b.blockRetriever
+	)
 
-	for _, bucket := range b.buckets {
+	for startNano, bucket := range b.buckets {
+		start := startNano.ToTime()
+		// We can only remove the bucket from the map if:
+		// 1) This bucket is empty
+		// 2) The blockStart is retrievable
+		// 3) the last success is after the last persist
+		// The last condition is necessary because there may have been an
+		// existing file on disk from a previous flush.
+		if bucket.isEmpty() && retriever.IsBlockRetrievable(start) &&
+			retriever.BlockLastSuccess(start).After(bucket.lastPersist()) {
+			b.removeBucketAt(start)
+			res.bucketsRemoved = append(res.bucketsRemoved, start)
+			continue
+		}
+
 		r, err := bucket.merge()
 		if err != nil {
 			log := b.opts.InstrumentOptions().Logger()
@@ -243,11 +263,11 @@ func (b *dbBuffer) Bootstrap(bl block.DatabaseBlock) {
 	// }
 }
 
-func (b *dbBuffer) minMaxRealtimeBlockStarts(now time.Time) (time.Time, time.Time) {
-	min := now.Add(-b.bufferPast).Truncate(b.blockSize)
-	max := now.Add(b.bufferFuture).Truncate(b.blockSize)
-	return min, max
-}
+// func (b *dbBuffer) minMaxRealtimeBlockStarts(now time.Time) (time.Time, time.Time) {
+// 	min := now.Add(-b.bufferPast).Truncate(b.blockSize)
+// 	max := now.Add(b.bufferFuture).Truncate(b.blockSize)
+// 	return min, max
+// }
 
 func (b *dbBuffer) Snapshot(
 	ctx context.Context,
@@ -272,7 +292,7 @@ func (b *dbBuffer) ReadEncoded(ctx context.Context, start, end time.Time) [][]xi
 	keys := b.sortedBucketKeys(true)
 	for _, key := range keys {
 		bucket := b.buckets[key]
-		if bucket.empty() || !start.Before(bucket.start.Add(b.blockSize)) ||
+		if bucket.isEmpty() || !start.Before(bucket.start.Add(b.blockSize)) ||
 			!bucket.start.Before(end) {
 			continue
 		}
@@ -318,7 +338,7 @@ func (b *dbBuffer) FetchBlocksMetadata(
 	keys := b.sortedBucketKeys(true)
 	for _, key := range keys {
 		bucket := b.buckets[key]
-		if bucket.empty() || !start.Before(bucket.start.Add(blockSize)) ||
+		if bucket.isEmpty() || !start.Before(bucket.start.Add(blockSize)) ||
 			!bucket.start.Before(end) {
 			continue
 		}
@@ -465,11 +485,8 @@ func (b *dbBuffer) Flush(
 		return FlushOutcomeErr, err
 	}
 
-	// Drain to blocks for it to handle caching
-	b.drainFn(block)
-	//HERE - we only flush realtime data but remove the bucket (which contains
-	// both realtime and out of order data)
-	b.removeBucketAt(blockStart)
+	bucket.setLastPersist(b.nowFn())
+
 	return FlushOutcomeFlushedToDisk, nil
 }
 
@@ -495,11 +512,12 @@ func (b *dbBuffer) sortedBucketKeys(ascending bool) []xtime.UnixNano {
 }
 
 type dbBufferBucket struct {
-	opts              Options
-	start             time.Time
-	encoders          [numMetricTypes][]inOrderEncoder
-	bootstrapped      [numMetricTypes][]block.DatabaseBlock
-	lastReadUnixNanos int64
+	opts                 Options
+	start                time.Time
+	encoders             [numMetricTypes][]inOrderEncoder
+	bootstrapped         [numMetricTypes][]block.DatabaseBlock
+	lastReadUnixNanos    int64
+	lastPersistUnixNanos int64
 }
 
 type inOrderEncoder struct {
@@ -536,7 +554,7 @@ func (b *dbBufferBucket) finalize() {
 	b.resetBootstrapped(allMetricTypes)
 }
 
-func (b *dbBufferBucket) empty() bool {
+func (b *dbBufferBucket) isEmpty() bool {
 	for i := 0; i < numMetricTypes; i++ {
 		for _, block := range b.bootstrapped[i] {
 			if block.Len() > 0 {
@@ -723,6 +741,14 @@ func (b *dbBufferBucket) lastRead() time.Time {
 	return time.Unix(0, atomic.LoadInt64(&b.lastReadUnixNanos))
 }
 
+func (b *dbBufferBucket) setLastPersist(value time.Time) {
+	atomic.StoreInt64(&b.lastPersistUnixNanos, value.UnixNano())
+}
+
+func (b *dbBufferBucket) lastPersist() time.Time {
+	return time.Unix(0, atomic.LoadInt64(&b.lastPersistUnixNanos))
+}
+
 func (b *dbBufferBucket) resetEncoders(mt metricType) {
 	var zeroed inOrderEncoder
 	for mType := 0; mType < numMetricTypes; mType++ {
@@ -755,7 +781,7 @@ func (b *dbBufferBucket) resetBootstrapped(mt metricType) {
 }
 
 func (b *dbBufferBucket) needsMerge() bool {
-	return !b.empty() && !b.hasJustSingleOOOEncoder() && !b.hasJustSingleRTEncoder() &&
+	return !b.isEmpty() && !b.hasJustSingleOOOEncoder() && !b.hasJustSingleRTEncoder() &&
 		!b.hasJustSingleOOOBootstrappedBlock() && !b.hasJustSingleRTBootstrappedBlock()
 }
 
@@ -898,7 +924,7 @@ func (b *dbBufferBucket) stream(ctx context.Context, mType metricType) (xio.Bloc
 		return xio.EmptyBlockReader, errInvalidMetricType
 	}
 
-	if b.empty() {
+	if b.isEmpty() {
 		return xio.EmptyBlockReader, nil
 	}
 

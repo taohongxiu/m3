@@ -130,6 +130,9 @@ type QueryableBlockRetriever interface {
 	// IsBlockRetrievable returns whether a block is retrievable
 	// for a given block start time
 	IsBlockRetrievable(blockStart time.Time) bool
+
+	// BlockLastSuccess returns the last time a block was marked success
+	BlockLastSuccess(blockStart time.Time) time.Time
 }
 
 // TickStatus is the status of a series for a given tick

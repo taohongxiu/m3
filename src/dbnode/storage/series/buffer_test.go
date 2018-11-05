@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
 	"github.com/m3db/m3/src/dbnode/encoding"
 	"github.com/m3db/m3/src/dbnode/encoding/m3tsz"
 	"github.com/m3db/m3/src/dbnode/storage/block"
@@ -74,7 +76,7 @@ func TestBufferWriteTooFuture(t *testing.T) {
 		return curr
 	}))
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	ctx := context.NewContext()
 	defer ctx.Close()
@@ -92,7 +94,7 @@ func TestBufferWriteTooPast(t *testing.T) {
 		return curr
 	}))
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	ctx := context.NewContext()
 	defer ctx.Close()
@@ -110,7 +112,7 @@ func TestBufferWritePastFutureOutOfOrderEnabled(t *testing.T) {
 		return curr
 	})).SetRetentionOptions(rops)
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	ctx := context.NewContext()
 	defer ctx.Close()
@@ -130,7 +132,7 @@ func TestBufferWriteRead(t *testing.T) {
 		return curr
 	}))
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	data := []value{
 		{curr.Add(secs(1)), 1, xtime.Second, nil},
@@ -162,7 +164,7 @@ func TestBufferReadOnlyMatchingBuckets(t *testing.T) {
 		return curr
 	}))
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	data := []value{
 		{curr.Add(mins(1)), 1, xtime.Second, nil},
@@ -202,7 +204,7 @@ func TestBufferWriteOutOfOrder(t *testing.T) {
 		return curr
 	}))
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	data := []value{
 		{curr, 1, xtime.Second, nil},
@@ -222,7 +224,7 @@ func TestBufferWriteOutOfOrder(t *testing.T) {
 	bucket, ok := buffer.bucketAt(start)
 	require.True(t, ok)
 	assert.Equal(t, 2, len(bucket.encoders[realtimeType]))
-	assert.False(t, bucket.empty())
+	assert.False(t, bucket.isEmpty())
 	assert.Equal(t, data[1].timestamp, mustGetLastEncoded(t, bucket.encoders[realtimeType][0]).Timestamp)
 	assert.Equal(t, data[2].timestamp, mustGetLastEncoded(t, bucket.encoders[realtimeType][1]).Timestamp)
 
@@ -417,7 +419,7 @@ func TestBufferFetchBlocks(t *testing.T) {
 	defer ctx.Close()
 
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 	buffer.buckets[xtime.ToUnixNano(b.start)] = b
 
 	res := buffer.FetchBlocks(ctx, []time.Time{b.start, b.start.Add(time.Second)})
@@ -439,7 +441,7 @@ func TestBufferFetchBlocksMetadata(t *testing.T) {
 	end := b.start.Add(time.Second)
 
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 	buffer.buckets[xtime.ToUnixNano(b.start)] = b
 
 	expectedSize := int64(b.streamsLen())
@@ -460,6 +462,9 @@ func TestBufferFetchBlocksMetadata(t *testing.T) {
 }
 
 func TestBufferTickReordersOutOfOrderBuffers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	opts := newBufferTestOptions()
 	rops := opts.RetentionOptions()
 	curr := time.Now().Truncate(rops.BlockSize())
@@ -467,8 +472,9 @@ func TestBufferTickReordersOutOfOrderBuffers(t *testing.T) {
 	opts = opts.SetClockOptions(opts.ClockOptions().SetNowFn(func() time.Time {
 		return curr
 	}))
+	blockRetriever := NewMockQueryableBlockRetriever(ctrl)
 	buffer := newDatabaseBuffer(nil).(*dbBuffer)
-	buffer.Reset(opts)
+	buffer.Reset(blockRetriever, opts)
 
 	// Perform out of order writes that will create two in order encoders
 	data := []value{
@@ -547,7 +553,7 @@ func TestBufferSnapshot(t *testing.T) {
 	opts = opts.SetClockOptions(opts.ClockOptions().SetNowFn(func() time.Time {
 		return curr
 	}))
-	buffer.Reset(opts)
+	buffer.Reset(nil, opts)
 
 	// Create test data to perform out of order writes that will create two in-order
 	// encoders so we can verify that Snapshot will perform a merge
