@@ -40,9 +40,7 @@ import (
 )
 
 var (
-	errInvalidMetricType           = errors.New("invalid metric type for context")
-	errBucketDoesNotExist          = errors.New("bucket does not exist for block start")
-	errMoreThanOneStreamAfterMerge = errors.New("buffer has more than one stream after merge")
+	errInvalidMetricType = errors.New("invalid metric type for context")
 
 	timeZero time.Time
 )
@@ -780,53 +778,11 @@ func (b *dbBufferBucket) resetBootstrapped(mt metricType) {
 	}
 }
 
-func (b *dbBufferBucket) needsMerge() bool {
-	return !b.isEmpty() && !b.hasJustSingleOOOEncoder() && !b.hasJustSingleRTEncoder() &&
-		!b.hasJustSingleOOOBootstrappedBlock() && !b.hasJustSingleRTBootstrappedBlock()
-}
-
-func (b *dbBufferBucket) hasJustSingleOOOEncoder() bool {
-	return len(b.encoders[outOfOrderType]) == 1 && len(b.bootstrapped[outOfOrderType]) == 0 &&
-		b.rtEncodersEmpty() && len(b.bootstrapped[realtimeType]) == 0
-}
-
-func (b *dbBufferBucket) hasJustSingleRTEncoder() bool {
-	return len(b.encoders[realtimeType]) == 1 && len(b.bootstrapped[realtimeType]) == 0 &&
-		b.oooEncodersEmpty() && len(b.bootstrapped[outOfOrderType]) == 0
-}
-
-func (b *dbBufferBucket) hasJustSingleOOOBootstrappedBlock() bool {
-	return b.oooEncodersEmpty() && len(b.bootstrapped[outOfOrderType]) == 1 &&
-		b.rtEncodersEmpty() && len(b.bootstrapped[realtimeType]) == 0
-}
-
-func (b *dbBufferBucket) hasJustSingleRTBootstrappedBlock() bool {
-	return b.rtEncodersEmpty() && len(b.bootstrapped[realtimeType]) == 1 &&
-		b.oooEncodersEmpty() && len(b.bootstrapped[outOfOrderType]) == 0
-}
-
-func (b *dbBufferBucket) oooEncodersEmpty() bool {
-	return len(b.encoders[outOfOrderType]) == 0 ||
-		(len(b.encoders[outOfOrderType]) == 1 &&
-			b.encoders[outOfOrderType][0].encoder.Len() == 0)
-}
-
-func (b *dbBufferBucket) rtEncodersEmpty() bool {
-	return len(b.encoders[realtimeType]) == 0 ||
-		(len(b.encoders[realtimeType]) == 1 &&
-			b.encoders[realtimeType][0].encoder.Len() == 0)
-}
-
 type mergeResult struct {
 	merges int
 }
 
 func (b *dbBufferBucket) merge() (mergeResult, error) {
-	// if !b.needsMerge() {
-	// 	// Save unnecessary work
-	// 	return mergeResult{}, nil
-	// }
-
 	merges := 0
 	start := b.start
 	bopts := b.opts.DatabaseBlockOptions()

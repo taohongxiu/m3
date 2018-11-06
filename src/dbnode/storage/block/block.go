@@ -35,8 +35,7 @@ import (
 )
 
 var (
-	errReadFromClosedBlock       = errors.New("attempt to read from a closed block")
-	errTriedToMergeBlockFromDisk = errors.New("[invariant violated] tried to merge a block that was retrieved from disk")
+	errReadFromClosedBlock = errors.New("attempt to read from a closed block")
 
 	timeZero = time.Time{}
 )
