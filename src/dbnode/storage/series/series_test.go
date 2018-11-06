@@ -242,13 +242,12 @@ func TestSeriesTickDrainAndResetBuffer(t *testing.T) {
 	buffer := NewMockdatabaseBuffer(ctrl)
 	series.buffer = buffer
 	buffer.EXPECT().Tick().Return(bufferTickResult{})
-	buffer.EXPECT().Stats().Return(bufferStats{openBlocks: 1, wiredBlocks: 1})
+	buffer.EXPECT().Stats().Return(bufferStats{wiredBlocks: 1})
 	r, err := series.Tick()
 	require.NoError(t, err)
 	assert.Equal(t, 1, r.ActiveBlocks)
 	assert.Equal(t, 1, r.WiredBlocks)
 	assert.Equal(t, 0, r.UnwiredBlocks)
-	assert.Equal(t, 1, r.OpenBlocks)
 }
 
 func TestSeriesTickNeedsBlockExpiry(t *testing.T) {
@@ -277,12 +276,11 @@ func TestSeriesTickNeedsBlockExpiry(t *testing.T) {
 	buffer := NewMockdatabaseBuffer(ctrl)
 	series.buffer = buffer
 	buffer.EXPECT().Tick().Return(bufferTickResult{})
-	buffer.EXPECT().Stats().Return(bufferStats{openBlocks: 1, wiredBlocks: 1})
+	buffer.EXPECT().Stats().Return(bufferStats{wiredBlocks: 1})
 	r, err := series.Tick()
 	require.NoError(t, err)
 	require.Equal(t, 2, r.ActiveBlocks)
 	require.Equal(t, 2, r.WiredBlocks)
-	require.Equal(t, 1, r.OpenBlocks)
 	require.Equal(t, 1, r.MadeExpiredBlocks)
 	require.Equal(t, 1, series.blocks.Len())
 	require.Equal(t, curr, series.blocks.MinTime())

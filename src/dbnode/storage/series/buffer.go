@@ -113,7 +113,6 @@ type databaseBuffer interface {
 }
 
 type bufferStats struct {
-	openBlocks  int
 	wiredBlocks int
 }
 
@@ -198,12 +197,10 @@ func (b *dbBuffer) IsEmpty() bool {
 func (b *dbBuffer) Stats() bufferStats {
 	var stats bufferStats
 	for _, bucket := range b.buckets {
-		// TODO(juchan): redefine what's meant by open/wired
 		if bucket.isEmpty() {
 			continue
 		}
 
-		stats.openBlocks++
 		stats.wiredBlocks++
 	}
 	return stats
@@ -269,7 +266,7 @@ func (b *dbBuffer) Bootstrap(bl block.DatabaseBlock) {
 
 func (b *dbBuffer) Snapshot(
 	ctx context.Context,
-	mType metricType, //HERE we only want to snapshot realtime metrics for now
+	mType metricType,
 	blockStart time.Time,
 ) (xio.SegmentReader, error) {
 	if mType == allMetricTypes {

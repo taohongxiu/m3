@@ -139,8 +139,6 @@ type QueryableBlockRetriever interface {
 type TickStatus struct {
 	// ActiveBlocks is the number of total active blocks
 	ActiveBlocks int
-	// OpenBlocks is the number of blocks actively mutable can be written to
-	OpenBlocks int
 	// WiredBlocks is the number of blocks wired in memory (all data kept)
 	WiredBlocks int
 	// UnwiredBlocks is the number of blocks unwired (data kept on disk)

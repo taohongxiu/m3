@@ -170,7 +170,6 @@ type databaseNamespaceTickMetrics struct {
 	activeSeries           tally.Gauge
 	expiredSeries          tally.Counter
 	activeBlocks           tally.Gauge
-	openBlocks             tally.Gauge
 	wiredBlocks            tally.Gauge
 	unwiredBlocks          tally.Gauge
 	pendingMergeBlocks     tally.Gauge
@@ -241,7 +240,6 @@ func newDatabaseNamespaceMetrics(scope tally.Scope, samplingRate float64) databa
 			activeSeries:           tickScope.Gauge("active-series"),
 			expiredSeries:          tickScope.Counter("expired-series"),
 			activeBlocks:           tickScope.Gauge("active-blocks"),
-			openBlocks:             tickScope.Gauge("open-blocks"),
 			wiredBlocks:            tickScope.Gauge("wired-blocks"),
 			unwiredBlocks:          tickScope.Gauge("unwired-blocks"),
 			pendingMergeBlocks:     tickScope.Gauge("pending-merge-blocks"),
@@ -533,7 +531,6 @@ func (n *dbNamespace) Tick(c context.Cancellable, tickStart time.Time) error {
 	n.metrics.tick.activeSeries.Update(float64(r.activeSeries))
 	n.metrics.tick.expiredSeries.Inc(int64(r.expiredSeries))
 	n.metrics.tick.activeBlocks.Update(float64(r.activeBlocks))
-	n.metrics.tick.openBlocks.Update(float64(r.openBlocks))
 	n.metrics.tick.wiredBlocks.Update(float64(r.wiredBlocks))
 	n.metrics.tick.unwiredBlocks.Update(float64(r.unwiredBlocks))
 	n.metrics.tick.pendingMergeBlocks.Update(float64(r.pendingMergeBlocks))

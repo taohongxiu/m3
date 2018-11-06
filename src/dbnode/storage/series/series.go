@@ -118,6 +118,7 @@ func (s *dbSeries) Tags() ident.Tags {
 
 func (s *dbSeries) Tick() (TickResult, error) {
 	var r TickResult
+
 	s.Lock()
 
 	bufferResult := s.buffer.Tick()
@@ -250,7 +251,6 @@ func (s *dbSeries) updateBlocksWithLock() (updateBlocksResult, error) {
 	bufferStats := s.buffer.Stats()
 	result.ActiveBlocks += bufferStats.wiredBlocks
 	result.WiredBlocks += bufferStats.wiredBlocks
-	result.OpenBlocks += bufferStats.openBlocks
 
 	return result, nil
 }
@@ -337,7 +337,7 @@ func (s *dbSeries) FetchBlocksMetadata(
 		if !start.Before(t.Add(blockSize)) || !t.Before(end) {
 			continue
 		}
-		//HERE is this option necessary now that all blocks are cached blocks?
+		// TODO(juchan): is this option necessary now that all blocks are cached blocks?
 		if !opts.IncludeCachedBlocks {
 			// Do not include cached blocks if not specified to, this is
 			// to avoid high amounts of duplication if a significant number of
