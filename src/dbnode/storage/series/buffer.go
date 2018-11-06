@@ -270,14 +270,15 @@ func (b *dbBuffer) Snapshot(
 	blockStart time.Time,
 ) (xio.SegmentReader, error) {
 	if mType == allMetricTypes {
-		return xio.EmptyBlockReader, errInvalidMetricType
+		return nil, errInvalidMetricType
 	}
 
 	if bucket, ok := b.bucketAt(blockStart); ok {
 		return bucket.stream(ctx, mType)
 	}
 
-	return xio.EmptyBlockReader, errStreamDidNotExistForBlock
+	// Not having data for a bucket is not an error
+	return nil, nil
 }
 
 func (b *dbBuffer) ReadEncoded(ctx context.Context, start, end time.Time) [][]xio.BlockReader {

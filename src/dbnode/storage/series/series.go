@@ -49,7 +49,6 @@ var (
 
 	errSeriesAlreadyBootstrapped = errors.New("series is already bootstrapped")
 	errSeriesNotBootstrapped     = errors.New("series is not yet bootstrapped")
-	errStreamDidNotExistForBlock = errors.New("stream did not exist for block")
 )
 
 type dbSeries struct {
