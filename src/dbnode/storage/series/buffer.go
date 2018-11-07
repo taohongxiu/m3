@@ -124,7 +124,6 @@ type bufferTickResult struct {
 type dbBuffer struct {
 	opts           Options
 	nowFn          clock.NowFn
-	drainFn        databaseBufferDrainFn
 	blockRetriever QueryableBlockRetriever
 
 	buckets     map[xtime.UnixNano]*dbBufferBucket
@@ -137,13 +136,10 @@ type dbBuffer struct {
 	outOfOrderWritesEnabled bool
 }
 
-type databaseBufferDrainFn func(b block.DatabaseBlock)
-
 // NB(prateek): databaseBuffer.Reset(...) must be called upon the returned
 // object prior to use.
-func newDatabaseBuffer(drainFn databaseBufferDrainFn) databaseBuffer {
+func newDatabaseBuffer() databaseBuffer {
 	b := &dbBuffer{
-		drainFn: drainFn,
 		buckets: make(map[xtime.UnixNano]*dbBufferBucket),
 	}
 	return b

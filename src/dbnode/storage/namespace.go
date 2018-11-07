@@ -819,7 +819,7 @@ func (n *dbNamespace) Flush(
 	for _, shard := range shards {
 		// This is different than calling shard.IsBootstrapped() because it was determined
 		// before the start of the tick that preceded this flush, meaning it can be reliably
-		// used to determine if all of the bootstrapped blocks have been merged / drained (ticked)
+		// used to determine if all of the bootstrapped blocks have been merged (ticked)
 		// and are ready to be flushed.
 		shardBootstrapStateBeforeTick, ok := shardBootstrapStatesAtTickStart[shard.ID()]
 		if !ok || shardBootstrapStateBeforeTick != Bootstrapped {

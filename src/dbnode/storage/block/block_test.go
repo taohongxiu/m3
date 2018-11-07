@@ -659,5 +659,4 @@ func TestBlockResetFromDisk(t *testing.T) {
 	assert.Equal(t, blockSize, bl.BlockSize())
 	assert.Equal(t, segment, bl.segment)
 	assert.Equal(t, id, bl.seriesID)
-	assert.True(t, bl.WasRetrievedFromDisk())
 }

@@ -48,7 +48,7 @@ type DatabaseSeries interface {
 	// Tags return the tags of the series
 	Tags() ident.Tags
 
-	// Tick executes any updates to ensure buffer drains, blocks are flushed, etc
+	// Tick executes async updates
 	Tick() (TickResult, error)
 
 	// Write writes a new value
