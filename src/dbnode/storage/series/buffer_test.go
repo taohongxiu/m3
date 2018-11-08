@@ -33,6 +33,7 @@ import (
 	"github.com/m3db/m3/src/dbnode/x/xio"
 	"github.com/m3db/m3x/context"
 	xerrors "github.com/m3db/m3x/errors"
+	"github.com/m3db/m3x/ident"
 	xtime "github.com/m3db/m3x/time"
 
 	"github.com/golang/mock/gomock"
@@ -634,4 +635,47 @@ func mustGetLastEncoded(t *testing.T, entry inOrderEncoder) ts.Datapoint {
 	last, err := entry.encoder.LastEncoded()
 	require.NoError(t, err)
 	return last
+}
+
+func TestBufferFlushRemoveBucketMap(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	opts := newBufferTestOptions()
+
+	curr := time.Now()
+	blockSize := opts.RetentionOptions().BlockSize()
+	blockStart := curr.Truncate(blockSize)
+	opts = opts.SetClockOptions(opts.ClockOptions().SetNowFn(func() time.Time {
+		return curr
+	}))
+	buffer := newDatabaseBuffer().(*dbBuffer)
+	blockRetriever := NewMockQueryableBlockRetriever(ctrl)
+	blockRetriever.EXPECT().IsBlockRetrievable(blockStart).Return(true)
+	blockRetriever.EXPECT().BlockLastSuccess(blockStart).Return(curr.Add(10 * time.Minute))
+	buffer.Reset(blockRetriever, opts)
+
+	ctx := context.NewContext()
+	err := buffer.Write(ctx, curr, 42, xtime.Second, nil)
+	ctx.BlockingClose()
+	assert.NoError(t, err)
+
+	ctx = context.NewContext()
+	persistFn := func(_ ident.ID, _ ident.Tags, _ ts.Segment, _ uint32) error {
+		return nil
+	}
+	outcome, err := buffer.Flush(ctx, blockStart, nil, ident.Tags{}, persistFn)
+	ctx.BlockingClose()
+	assert.Equal(t, FlushOutcomeFlushedToDisk, outcome)
+	assert.NoError(t, err)
+
+	bucket, exists := buffer.bucketAt(blockStart)
+	require.True(t, exists)
+	assert.True(t, bucket.isEmpty())
+
+	tickRes := buffer.Tick()
+	assert.Equal(t, bufferTickResult{
+		mergedOutOfOrderBlocks: 0,
+		bucketsRemoved:         []time.Time{blockStart},
+	}, tickRes)
 }

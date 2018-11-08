@@ -213,9 +213,9 @@ func (b *dbBuffer) Tick() bufferTickResult {
 		// We can only remove the bucket from the map if:
 		// 1) This bucket is empty
 		// 2) The blockStart is retrievable
-		// 3) the last success is after the last persist
-		// The last condition is necessary because there may have been an
-		// existing file on disk from a previous flush.
+		// 3) the last success is after the last persist. This is necessary
+		//    because there may have been an existing file on disk from a previous
+		//    flush.
 		if bucket.isEmpty() && retriever.IsBlockRetrievable(start) &&
 			retriever.BlockLastSuccess(start).After(bucket.lastPersist()) {
 			b.removeBucketAt(start)
@@ -865,6 +865,11 @@ func (b *dbBufferBucket) discardMerged(mType metricType) (discardMergedResult, e
 	if lastRead := b.lastRead(); !lastRead.IsZero() {
 		newBlock.SetLastReadTime(lastRead)
 	}
+
+	// The merged encoder is already discarded, no need to call resetEncoders
+	// just remove it from the list of encoders
+	b.encoders[mType] = b.encoders[mType][:0]
+	b.resetBootstrapped(mType)
 
 	return discardMergedResult{newBlock, mergeResult.merges}, nil
 }
